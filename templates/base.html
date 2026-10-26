@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="PIJAR — Pelaporan Infrastruktur Jalan dan Ruang, platform transparansi publik Kota Surabaya." />
+  <title>{% block title %}PIJAR{% endblock %}</title>
+
+  <!-- Tailwind CSS via CDN — darkMode: 'class' enables manual toggling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons via CDN -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!--
+    Dark mode initialisation — runs inline before first paint to prevent flash.
+    Must appear in <head>, before any Tailwind class is applied.
+  -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem('pijar-theme');
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    }());
+  </script>
+
+  {% block head %}{% endblock %}
+</head>
+
+<body class="h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans antialiased transition-colors duration-200">
+
+  <!-- ================================================================
+       NAVIGATION
+  ================================================================ -->
+  <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-40 transition-colors">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="flex items-center justify-between h-14 gap-3">
+
+        <!-- Brand -->
+        <a href="{{ url_for('dashboard') }}" class="flex items-center gap-2 shrink-0">
+          <span class="inline-flex items-center justify-center w-7 h-7 rounded bg-blue-600 text-white">
+            <i data-lucide="map-pin" class="w-4 h-4"></i>
+          </span>
+          <span class="font-bold text-slate-900 dark:text-white text-base tracking-tight leading-none">PIJAR</span>
+          <span class="hidden sm:inline text-slate-300 dark:text-slate-500 text-sm font-normal">Infrastruktur Surabaya</span>
+        </a>
+
+        <!-- Nav actions -->
+        <nav class="flex items-center gap-1.5">
+
+          <!-- Dashboard link -->
+          <a href="{{ url_for('dashboard') }}"
+             class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
+                    text-slate-500 dark:text-slate-400
+                    hover:text-slate-900 dark:hover:text-white
+                    hover:bg-slate-100 dark:hover:bg-slate-700
+                    rounded-md transition-colors">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            Dashboard
+          </a>
+
+          <!-- Report link -->
+          <a href="{{ url_for('report') }}"
+             class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white
+                    bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-md transition-colors">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Laporkan
+          </a>
+
+          <!-- Dark mode toggle -->
+          <button id="theme-toggle"
+                  aria-label="Ganti tema gelap/terang"
+                  class="inline-flex items-center justify-center w-9 h-9
+                         text-slate-500 dark:text-slate-400
+                         hover:bg-slate-100 dark:hover:bg-slate-700
+                         rounded-md transition-colors">
+            <!-- Sun icon — shown in dark mode -->
+            <i data-lucide="sun"  id="icon-sun"  class="w-4 h-4 hidden dark:block"></i>
+            <!-- Moon icon — shown in light mode -->
+            <i data-lucide="moon" id="icon-moon" class="w-4 h-4 block  dark:hidden"></i>
+          </button>
+
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================================================================
+       FLASH MESSAGES
+  ================================================================ -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-4 space-y-2" role="alert" aria-live="polite">
+        {% for category, message in messages %}
+          {% if category == 'success' %}
+            <div class="flex items-start gap-3 px-4 py-3
+                        bg-green-50 dark:bg-green-900/30
+                        border border-green-200 dark:border-green-700
+                        text-green-800 dark:text-green-300
+                        rounded-md text-sm">
+              <i data-lucide="check-circle" class="w-4 h-4 shrink-0 mt-0.5 text-green-600 dark:text-green-400"></i>
+              <p>{{ message }}</p>
+            </div>
+          {% elif category == 'error' %}
+            <div class="flex items-start gap-3 px-4 py-3
+                        bg-red-50 dark:bg-red-900/30
+                        border border-red-200 dark:border-red-700
+                        text-red-800 dark:text-red-300
+                        rounded-md text-sm">
+              <i data-lucide="x-circle" class="w-4 h-4 shrink-0 mt-0.5 text-red-600 dark:text-red-400"></i>
+              <p>{{ message }}</p>
+            </div>
+          {% else %}
+            <div class="flex items-start gap-3 px-4 py-3
+                        bg-blue-50 dark:bg-blue-900/30
+                        border border-blue-200 dark:border-blue-700
+                        text-blue-800 dark:text-blue-300
+                        rounded-md text-sm">
+              <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400"></i>
+              <p>{{ message }}</p>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- ================================================================
+       PAGE CONTENT
+  ================================================================ -->
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ================================================================
+       FOOTER — multi-column, light + dark
+  ================================================================ -->
+  <footer class="mt-12 border-t border-slate-200 dark:border-slate-800
+                 bg-slate-50 dark:bg-slate-950 transition-colors">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-12">
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+
+        <!-- Brand column -->
+        <div class="space-y-3">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center justify-center w-7 h-7 rounded bg-blue-600 text-white shrink-0">
+              <i data-lucide="map-pin" class="w-4 h-4"></i>
+            </span>
+            <span class="font-bold text-slate-900 dark:text-white text-base tracking-tight">PIJAR</span>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-xs">
+            Platform pelaporan infrastruktur publik berbasis data terbuka untuk mendorong
+            akuntabilitas pemerintah dan partisipasi warga Kota Surabaya.
+          </p>
+          <p class="text-xs text-slate-400 dark:text-slate-600 pt-1">
+            Civic Tech &amp; Open Data Initiative
+          </p>
+        </div>
+
+        <!-- Quick links column -->
+        <div>
+          <h4 class="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4">
+            Navigasi
+          </h4>
+          <ul class="space-y-2.5">
+            <li>
+              <a href="{{ url_for('dashboard') }}"
+                 class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400
+                        hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+                Dashboard
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('report') }}"
+                 class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400
+                        hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                Kirim Laporan
+              </a>
+            </li>
+            <li>
+              <a href="#"
+                 class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400
+                        hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                <i data-lucide="users" class="w-3.5 h-3.5"></i>
+                Tentang Kami
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Info column -->
+        <div>
+          <h4 class="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4">
+            Informasi
+          </h4>
+          <ul class="space-y-2.5">
+            <li class="flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <i data-lucide="map" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i>
+              Kota Surabaya, Jawa Timur
+            </li>
+            <li class="flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i>
+              Data publik, bukan pemerintah resmi
+            </li>
+            <li class="flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <i data-lucide="git-branch" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i>
+              Open Source, Flask + SQLite
+            </li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Bottom bar -->
+      <div class="mt-10 pt-6 border-t border-slate-200 dark:border-slate-800
+                  flex flex-col sm:flex-row items-center justify-between gap-3
+                  text-xs text-slate-400 dark:text-slate-600">
+        <p>© 2026 PIJAR. Hak cipta dilindungi undang-undang.</p>
+        <p>Dibangun dengan Flask, SQLite, Tailwind CSS, dan Leaflet.js</p>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- Lucide icon initialisation — must run after DOM is ready -->
+  <script>lucide.createIcons();</script>
+
+  <!-- Dark mode toggle logic -->
+  <script>
+  (function () {
+    var btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var html = document.documentElement;
+      if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        localStorage.setItem('pijar-theme', 'light');
+      } else {
+        html.classList.add('dark');
+        localStorage.setItem('pijar-theme', 'dark');
+      }
+      // Lucide re-render so sun/moon display:block swap takes effect
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  }());
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

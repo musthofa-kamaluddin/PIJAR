@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — PIJAR{% endblock %}
+
+{% block content %}
+
+<!-- ================================================================
+     PAGE HEADER
+================================================================ -->
+<div class="mb-6">
+  <h1 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+    Papan Transparansi Infrastruktur
+  </h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    Diurutkan berdasarkan skor urgensi. Laporan melewati SLA 7 hari ditandai dengan batas merah.
+  </p>
+</div>
+
+<!-- ================================================================
+     STAT CARDS
+================================================================ -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-4 py-4">
+    <p class="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1">Total</p>
+    <p class="text-2xl font-bold text-slate-900 dark:text-white">{{ total }}</p>
+  </div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-4 py-4">
+    <p class="text-xs font-semibold uppercase tracking-widest text-blue-500 mb-1">Menunggu</p>
+    <p class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ pending_count }}</p>
+  </div>
+
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-4 py-4">
+    <p class="text-xs font-semibold uppercase tracking-widest text-green-500 mb-1">Selesai</p>
+    <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{ resolved_count }}</p>
+  </div>
+
+  <div class="rounded-md px-4 py-4
+              {% if shame_count > 0 %}
+                bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800
+              {% else %}
+                bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+              {% endif %}">
+    <p class="text-xs font-semibold uppercase tracking-widest text-red-400 mb-1">Lewat SLA</p>
+    <p class="text-2xl font-bold text-red-600 dark:text-red-400">{{ shame_count }}</p>
+  </div>
+
+</div>
+
+<!-- ================================================================
+     REPORT CARDS
+================================================================ -->
+{% if reports %}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% for report in reports %}
+
+      {# --- Visual state --- #}
+      {% if report.is_overdue %}
+        {% set left_border = "border-l-4 border-l-red-500" %}
+        {% set badge_cls   = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" %}
+        {% set badge_label = "Lewat SLA" %}
+      {% elif report.status == 'resolved' %}
+        {% set left_border = "border-l-4 border-l-green-500" %}
+        {% set badge_cls   = "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" %}
+        {% set badge_label = "Selesai" %}
+      {% else %}
+        {% set left_border = "border-l-4 border-l-blue-400" %}
+        {% set badge_cls   = "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" %}
+        {% set badge_label = "Menunggu" %}
+      {% endif %}
+
+      <!--
+        Fix 4: border-l-* must come AFTER the shorthand `border` class so the
+        cascade makes the left override win. Tailwind CDN processes classes in
+        document order, so placing the specific side-classes last guarantees
+        the left border colour and width are not reset by `border-slate-200`.
+      -->
+      <article class="bg-white dark:bg-slate-800
+                      rounded-md flex flex-col transition-colors
+                      border border-slate-200 dark:border-slate-700
+                      {{ left_border }}">
+
+        <!-- Card body -->
+        <div class="p-5 flex-1">
+
+          <!-- Badge row -->
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold {{ badge_cls }}">
+              {{ badge_label }}
+            </span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                         bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+              {{ report.category }}
+            </span>
+            <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">{{ report.days_old }} hari lalu</span>
+          </div>
+
+          <!-- Title -->
+          <h2 class="font-semibold text-slate-900 dark:text-slate-100 text-sm leading-snug mb-2">
+            {{ report.title }}
+          </h2>
+
+          <!-- Meta row -->
+          <div class="flex items-center gap-4 text-xs text-slate-400 dark:text-slate-500">
+            <span class="flex items-center gap-1">
+              <i data-lucide="chevrons-up" class="w-3.5 h-3.5"></i>
+              {{ report.upvotes }} suara
+            </span>
+            <span class="flex items-center gap-1">
+              <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
+              Urgensi {{ report.urgency }}
+            </span>
+            {% if report.latitude and report.longitude %}
+              <span class="flex items-center gap-1">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                Koordinat tersedia
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Resolved: budget summary inline -->
+          {% if report.status == 'resolved' and report.budget_spent %}
+            <div class="mt-3 flex items-center gap-1.5 text-xs
+                        text-amber-700 dark:text-amber-400
+                        bg-amber-50 dark:bg-amber-900/20
+                        border border-amber-200 dark:border-amber-800
+                        rounded px-3 py-2">
+              <i data-lucide="banknote" class="w-3.5 h-3.5 shrink-0"></i>
+              <span>Rp {{ "{:,.0f}".format(report.budget_spent).replace(',', '.') }}</span>
+              {% if report.budget_source %}
+                <span class="text-amber-400 mx-1">·</span>
+                <span class="truncate">{{ report.budget_source }}</span>
+              {% endif %}
+            </div>
+          {% endif %}
+
+        </div>
+
+        <!-- Card footer -->
+        <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-700
+                    flex items-center justify-between gap-3">
+
+          <!-- Upvote -->
+          <form action="{{ url_for('upvote', report_id=report.id) }}" method="POST" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            {% if report.id in upvoted_ids %}
+              <button type="submit" disabled
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                             text-slate-400 dark:text-slate-500
+                             bg-slate-50 dark:bg-slate-800
+                             border border-slate-200 dark:border-slate-700
+                             rounded opacity-60 cursor-not-allowed">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                Didukung
+              </button>
+            {% else %}
+              <button type="submit"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                             text-slate-600 dark:text-slate-300
+                             bg-white dark:bg-slate-700
+                             border border-slate-200 dark:border-slate-600
+                             hover:bg-slate-50 dark:hover:bg-slate-600
+                             hover:border-slate-300 dark:hover:border-slate-500
+                             active:bg-slate-100 dark:active:bg-slate-500
+                             rounded transition-colors">
+                <i data-lucide="thumbs-up" class="w-3.5 h-3.5"></i>
+                Dukung
+              </button>
+            {% endif %}
+          </form>
+
+          <!-- Lihat Detail -->
+          <a href="{{ url_for('detail', report_id=report.id) }}"
+             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
+                    text-blue-600 dark:text-blue-400
+                    bg-blue-50 dark:bg-blue-900/30
+                    border border-blue-200 dark:border-blue-800
+                    hover:bg-blue-100 dark:hover:bg-blue-900/50
+                    active:bg-blue-200 dark:active:bg-blue-900/70
+                    rounded transition-colors">
+            Lihat Detail
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+          </a>
+
+        </div>
+      </article>
+
+    {% endfor %}
+  </div>
+
+{% else %}
+  <div class="flex flex-col items-center justify-center py-24 text-center">
+    <i data-lucide="inbox" class="w-12 h-12 text-slate-200 dark:text-slate-700 mb-4"></i>
+    <h2 class="text-lg font-semibold text-slate-600 dark:text-slate-300 mb-1">Belum ada laporan</h2>
+    <p class="text-sm text-slate-400 dark:text-slate-500 mb-5 max-w-xs">
+      Jadilah yang pertama melaporkan masalah infrastruktur di sekitar Anda.
+    </p>
+    <a href="{{ url_for('report') }}"
+       class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white
+              bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-md transition-colors">
+      <i data-lucide="plus" class="w-4 h-4"></i>
+      Buat Laporan
+    </a>
+  </div>
+{% endif %}
+
+{% endblock %}

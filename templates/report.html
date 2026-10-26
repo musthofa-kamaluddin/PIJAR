@@ -1,0 +1,545 @@
+{% extends "base.html" %}
+
+{% block title %}Laporkan Masalah — PIJAR{% endblock %}
+
+{% block head %}
+  <!-- Leaflet CSS — served locally, no CDN dependency -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}"/>
+{% endblock %}
+
+{% block content %}
+
+<!-- ================================================================
+     PAGE HEADER
+================================================================ -->
+<div class="mb-6">
+  <a href="{{ url_for('dashboard') }}"
+     class="inline-flex items-center gap-1.5 text-sm
+            text-slate-400 dark:text-slate-500
+            hover:text-blue-600 dark:hover:text-blue-400
+            transition-colors mb-3">
+    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+    Kembali ke Dashboard
+  </a>
+  <h1 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+    Laporkan Masalah Infrastruktur
+  </h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    Isi formulir di bawah. Pilih lokasi dengan menyeret penanda pada peta.
+  </p>
+</div>
+
+<!-- ================================================================
+     FORM
+================================================================ -->
+<div class="max-w-2xl">
+  <form action="{{ url_for('report') }}"
+        method="POST"
+        enctype="multipart/form-data"
+        novalidate
+        class="bg-white dark:bg-slate-800
+               border border-slate-200 dark:border-slate-700
+               rounded-md overflow-hidden transition-colors">
+
+    <!-- CSRF token -->
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+    <div class="p-6 space-y-6">
+
+      <!-- ── Judul ── -->
+      <div>
+        <label for="title"
+               class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+          Judul Laporan <span class="text-red-500" aria-hidden="true">*</span>
+        </label>
+        <input type="text"
+               id="title"
+               name="title"
+               required
+               maxlength="200"
+               value="{{ form_data.get('title', '') }}"
+               placeholder="Contoh: Jalan berlubang di depan SDN 1 Manyar"
+               class="w-full px-3 py-2.5 rounded-md
+                      border border-slate-300 dark:border-slate-600
+                      bg-white dark:bg-slate-700
+                      text-slate-800 dark:text-slate-100
+                      placeholder-slate-400 dark:placeholder-slate-500
+                      text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                      transition" />
+      </div>
+
+      <!-- ── Kategori ── -->
+      <div>
+        <label for="category"
+               class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+          Kategori <span class="text-red-500" aria-hidden="true">*</span>
+        </label>
+        <select id="category"
+                name="category"
+                required
+                class="w-full px-3 py-2.5 rounded-md
+                       border border-slate-300 dark:border-slate-600
+                       bg-white dark:bg-slate-700
+                       text-slate-800 dark:text-slate-100
+                       text-sm appearance-none
+                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                       transition">
+          <option value="" disabled {% if not form_data.get('category') %}selected{% endif %}>
+            Pilih kategori
+          </option>
+          {% for opt in ['Jalan Rusak', 'Drainase', 'Trotoar', 'PJU', 'Lainnya'] %}
+            <option value="{{ opt }}"
+                    {% if form_data.get('category') == opt %}selected{% endif %}>
+              {{ opt }}{% if opt == 'PJU' %} (Penerangan Jalan Umum){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- ── Deskripsi ── -->
+      <div>
+        <label for="description"
+               class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+          Deskripsi
+          <span class="font-normal text-slate-400 dark:text-slate-500">(opsional)</span>
+        </label>
+        <textarea id="description"
+                  name="description"
+                  rows="3"
+                  maxlength="1000"
+                  placeholder="Jelaskan kondisi kerusakan, dampaknya, dan informasi relevan lainnya."
+                  class="w-full px-3 py-2.5 rounded-md
+                         border border-slate-300 dark:border-slate-600
+                         bg-white dark:bg-slate-700
+                         text-slate-800 dark:text-slate-100
+                         placeholder-slate-400 dark:placeholder-slate-500
+                         text-sm resize-y
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         transition">{{ form_data.get('description', '') }}</textarea>
+      </div>
+
+      <!-- ── Foto Bukti ── -->
+      <div>
+        <label for="issue_image"
+               class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+          Foto Bukti
+          <span class="font-normal text-slate-400 dark:text-slate-500">(opsional, maks. 8 MB)</span>
+        </label>
+
+        <!--
+          Drop zone — handles both click-to-browse and native drag-and-drop.
+          JS toggles 'drop-active' class on dragover for visual feedback.
+        -->
+        <div id="drop-zone"
+             class="relative w-full border-2 border-dashed rounded-md
+                    border-slate-300 dark:border-slate-600
+                    bg-slate-50 dark:bg-slate-700/50
+                    transition-colors duration-150
+                    cursor-pointer">
+
+          <!-- Default idle state (hidden when preview is shown) -->
+          <label for="issue_image"
+                 id="drop-idle"
+                 class="flex flex-col items-center justify-center py-8 gap-2 cursor-pointer">
+            <i data-lucide="upload-cloud"
+               class="w-8 h-8 text-slate-300 dark:text-slate-500"></i>
+            <p class="text-sm text-slate-400 dark:text-slate-400">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Klik untuk unggah</span>
+              atau seret file ke sini
+            </p>
+            <p class="text-xs text-slate-300 dark:text-slate-600">PNG, JPG, JPEG, GIF — maks. 8 MB</p>
+          </label>
+
+          <!-- Preview state (hidden until file chosen) -->
+          <div id="drop-preview" class="hidden p-4 flex items-start gap-4">
+            <img id="preview-thumb"
+                 src="" alt="Pratinjau foto"
+                 class="w-24 h-24 object-contain rounded border border-slate-200
+                        dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+            <div class="flex-1 min-w-0 space-y-1">
+              <p id="preview-name"
+                 class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate"></p>
+              <p id="preview-size"
+                 class="text-xs text-slate-400 dark:text-slate-500"></p>
+              <!-- Progress bar -->
+              <div class="w-full bg-slate-200 dark:bg-slate-600 rounded-full h-1.5 overflow-hidden">
+                <div id="preview-bar"
+                     class="h-1.5 bg-blue-500 rounded-full transition-all duration-300"
+                     style="width:0%"></div>
+              </div>
+              <p id="preview-status"
+                 class="text-xs text-slate-400 dark:text-slate-500"></p>
+            </div>
+            <!-- Remove / change button -->
+            <button type="button" id="drop-remove"
+                    aria-label="Hapus foto"
+                    class="shrink-0 text-slate-400 hover:text-red-500 dark:hover:text-red-400
+                           transition-colors">
+              <i data-lucide="x-circle" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <!-- Hidden real file input -->
+          <input id="issue_image"
+                 name="issue_image"
+                 type="file"
+                 accept=".png,.jpg,.jpeg,.gif"
+                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                 aria-label="Unggah foto bukti kerusakan" />
+        </div>
+
+        <!-- Inline error (oversized / wrong type) -->
+        <p id="file-error"
+           class="mt-1.5 text-xs text-red-500 hidden"></p>
+      </div>
+
+      <!-- ── Lokasi via Leaflet Map ── -->
+      <div>
+        <p class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+          Lokasi Kerusakan
+          <span class="font-normal text-slate-400 dark:text-slate-500">
+            (seret penanda untuk menentukan titik tepat)
+          </span>
+        </p>
+
+        <!-- Status bar -->
+        <div id="map-status"
+             class="mb-2 text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5"
+             aria-live="polite">
+          <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin" id="status-icon"></i>
+          <span id="status-text">Mendeteksi lokasi Anda...</span>
+        </div>
+
+        <!--
+          Map container.
+          - Explicit pixel height via inline style (required by Leaflet).
+          - overflow-hidden removed — it collapses the Leaflet tile layer.
+          - rounded-md on wrapper div below preserves visual border-radius.
+          - z-0 keeps it below the sticky nav (z-40).
+        -->
+        <div class="rounded-md border border-slate-300 dark:border-slate-600 overflow-hidden">
+          <div id="report-map"
+               style="height:300px;"
+               class="w-full z-0"></div>
+        </div>
+
+        <!-- Coordinate readout -->
+        <div id="coord-display" class="mt-2 grid grid-cols-2 gap-2 hidden">
+          <div class="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-xs">
+            <p class="text-slate-400 dark:text-slate-500 mb-0.5">Lintang</p>
+            <p id="disp-lat" class="font-mono text-slate-700 dark:text-slate-200"></p>
+          </div>
+          <div class="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-xs">
+            <p class="text-slate-400 dark:text-slate-500 mb-0.5">Bujur</p>
+            <p id="disp-lon" class="font-mono text-slate-700 dark:text-slate-200"></p>
+          </div>
+        </div>
+
+        <!-- Hidden coordinate fields -->
+        <input type="hidden" id="latitude"  name="latitude"  value="" />
+        <input type="hidden" id="longitude" name="longitude" value="" />
+      </div>
+
+    </div><!-- /form body -->
+
+    <!-- Form footer -->
+    <div class="px-6 py-4 bg-slate-50 dark:bg-slate-700/50
+                border-t border-slate-200 dark:border-slate-700
+                flex flex-col sm:flex-row items-center justify-between gap-3">
+      <p class="text-xs text-slate-400 dark:text-slate-500 order-2 sm:order-1">
+        <span class="text-red-500">*</span> Wajib diisi
+      </p>
+      <button type="submit"
+              class="w-full sm:w-auto inline-flex items-center justify-center gap-2
+                     px-5 py-2.5 text-sm font-bold text-white
+                     bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+                     rounded-md transition-colors order-1 sm:order-2">
+        <i data-lucide="send" class="w-4 h-4"></i>
+        Kirim Laporan
+      </button>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+
+<!-- ================================================================
+     SCRIPTS
+     Leaflet JS loaded here (end of body), AFTER the map container
+     exists in the DOM. Initialisation wrapped in DOMContentLoaded so
+     it is safe even if this block runs before the DOM is fully parsed.
+================================================================ -->
+{% block scripts %}
+<!-- Leaflet JS — served locally, no CDN dependency -->
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script>
+/* jshint ignore:start */
+/* eslint-disable */
+(function () {
+  'use strict';
+
+  // ── DOM refs ──────────────────────────────────────────────────────
+  var latInput   = document.getElementById('latitude');
+  var lonInput   = document.getElementById('longitude');
+  var coordBox   = document.getElementById('coord-display');
+  var dispLat    = document.getElementById('disp-lat');
+  var dispLon    = document.getElementById('disp-lon');
+  var statusIcon = document.getElementById('status-icon');
+  var statusText = document.getElementById('status-text');
+
+  // Default centre: Surabaya city centre
+  var DEFAULT_LAT  = -7.2575;
+  var DEFAULT_LON  = 112.7383;
+  var DEFAULT_ZOOM = 13;
+
+  // Guard: if Leaflet failed to load, show visible fallback
+  if (typeof L === 'undefined') {
+    var el = document.getElementById('report-map');
+    if (el) {
+      el.style.display        = 'flex';
+      el.style.alignItems     = 'center';
+      el.style.justifyContent = 'center';
+      el.style.background     = '#f1f5f9';
+      el.style.color          = '#94a3b8';
+      el.style.fontSize       = '0.8rem';
+      el.textContent          = 'Peta tidak tersedia (Leaflet gagal dimuat).';
+    }
+    if (statusText) statusText.textContent = 'Peta tidak tersedia.';
+    return;
+  }
+
+  function initMap() {
+    // ── Initialise map ─────────────────────────────────────────────
+    var map = L.map('report-map', {
+      zoomControl:     true,
+      scrollWheelZoom: true
+    }).setView([DEFAULT_LAT, DEFAULT_LON], DEFAULT_ZOOM);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution : '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+      maxZoom     : 19,
+      detectRetina: true
+    }).addTo(map);
+
+    // Re-measure container after layout settles (Tailwind CDN async)
+    setTimeout(function () { map.invalidateSize(); }, 200);
+
+    // ── Draggable marker ───────────────────────────────────────────
+    var marker = L.marker([DEFAULT_LAT, DEFAULT_LON], { draggable: true }).addTo(map);
+    marker.bindTooltip('Seret untuk menyesuaikan lokasi', {
+      permanent : false,
+      direction : 'top'
+    });
+
+    function updateCoords(latlng) {
+      var lat = latlng.lat.toFixed(6);
+      var lon = latlng.lng.toFixed(6);
+      latInput.value      = lat;
+      lonInput.value      = lon;
+      dispLat.textContent = lat;
+      dispLon.textContent = lon;
+      coordBox.classList.remove('hidden');
+    }
+
+    marker.on('dragend', function (e) {
+      updateCoords(e.target.getLatLng());
+      setStatus('ok', 'Lokasi diperbarui. Seret penanda untuk menyesuaikan.');
+    });
+
+    map.on('click', function (e) {
+      marker.setLatLng(e.latlng);
+      updateCoords(e.latlng);
+      setStatus('ok', 'Lokasi diperbarui. Seret penanda untuk menyesuaikan.');
+    });
+
+    // Seed hidden inputs with default position immediately
+    updateCoords(marker.getLatLng());
+
+    // ── Status helper ──────────────────────────────────────────────
+    function setStatus(state, text) {
+      statusText.textContent = text;
+      statusIcon.setAttribute('data-lucide',
+        state === 'loading' ? 'loader'       :
+        state === 'ok'      ? 'map-pin'      :
+                              'alert-circle'
+      );
+      statusIcon.className = 'w-3.5 h-3.5' + (state === 'loading' ? ' animate-spin' : '');
+      if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [statusIcon] });
+    }
+
+    // ── Geolocation — auto-centre on user position ─────────────────
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+          map.setView(latlng, 16);
+          marker.setLatLng(latlng);
+          updateCoords(latlng);
+          setStatus('ok', 'Lokasi terdeteksi. Seret penanda untuk menyesuaikan posisi.');
+        },
+        function (err) {
+          var msg = {
+            1: 'Izin lokasi ditolak. Lokasi diset ke pusat Surabaya.',
+            2: 'Lokasi tidak tersedia. Lokasi diset ke pusat Surabaya.',
+            3: 'Permintaan lokasi habis waktu. Lokasi diset ke pusat Surabaya.'
+          };
+          setStatus('warn', msg[err.code] || 'Lokasi tidak dapat dideteksi. Sesuaikan penanda secara manual.');
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    } else {
+      setStatus('warn', 'Browser tidak mendukung GPS. Sesuaikan penanda secara manual.');
+    }
+
+    // ── Drag-drop upload zone ──────────────────────────────────────
+    var dropZone    = document.getElementById('drop-zone');
+    var fileInput   = document.getElementById('issue_image');
+    var dropIdle    = document.getElementById('drop-idle');
+    var dropPreview = document.getElementById('drop-preview');
+    var prevThumb   = document.getElementById('preview-thumb');
+    var prevName    = document.getElementById('preview-name');
+    var prevSize    = document.getElementById('preview-size');
+    var prevBar     = document.getElementById('preview-bar');
+    var prevStatus  = document.getElementById('preview-status');
+    var dropRemove  = document.getElementById('drop-remove');
+    var fileError   = document.getElementById('file-error');
+
+    var MAX_BYTES   = 8 * 1024 * 1024;
+    var ALLOWED     = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+    function formatBytes(b) {
+      return b >= 1048576
+        ? (b / 1048576).toFixed(1) + ' MB'
+        : (b / 1024).toFixed(0)   + ' KB';
+    }
+
+    function showError(msg) {
+      fileError.textContent = msg;
+      fileError.classList.remove('hidden');
+    }
+
+    function clearError() {
+      fileError.classList.add('hidden');
+      fileError.textContent = '';
+    }
+
+    function resetDropZone() {
+      dropIdle.classList.remove('hidden');
+      dropPreview.classList.add('hidden');
+      prevThumb.src = '';
+      prevBar.style.width = '0%';
+      prevStatus.textContent = '';
+      clearError();
+    }
+
+    function loadPreview(file) {
+      clearError();
+
+      // Validate type
+      if (ALLOWED.indexOf(file.type) === -1) {
+        showError('Format tidak didukung. Gunakan PNG, JPG, JPEG, atau GIF.');
+        resetDropZone();
+        return;
+      }
+
+      // Validate size
+      if (file.size > MAX_BYTES) {
+        showError('Ukuran file terlalu besar. Maksimal 8 MB.');
+        resetDropZone();
+        return;
+      }
+
+      // Show preview panel
+      dropIdle.classList.add('hidden');
+      dropPreview.classList.remove('hidden');
+      prevName.textContent   = file.name;
+      prevSize.textContent   = formatBytes(file.size);
+      prevStatus.textContent = 'Membaca file...';
+      prevBar.style.width    = '0%';
+
+      // Simulate read progress then show thumbnail
+      var reader = new FileReader();
+      reader.onprogress = function (e) {
+        if (e.lengthComputable) {
+          prevBar.style.width = Math.round((e.loaded / e.total) * 80) + '%';
+        }
+      };
+      reader.onload = function (e) {
+        prevBar.style.width    = '100%';
+        prevStatus.textContent = 'Siap diunggah';
+        prevThumb.src          = e.target.result;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      };
+      reader.onerror = function () {
+        prevStatus.textContent = 'Gagal membaca file.';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // File input change (click-to-browse)
+    if (fileInput) {
+      fileInput.addEventListener('change', function () {
+        if (this.files && this.files[0]) {
+          loadPreview(this.files[0]);
+        }
+      });
+    }
+
+    // Remove button — clear selection and return to idle state
+    if (dropRemove) {
+      dropRemove.addEventListener('click', function (e) {
+        e.stopPropagation();
+        fileInput.value = '';
+        resetDropZone();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      });
+    }
+
+    // Drag-and-drop events on the drop zone wrapper
+    if (dropZone) {
+      dropZone.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        dropZone.classList.add('border-blue-400', 'bg-blue-50',
+                               'dark:bg-blue-900/20', 'dark:border-blue-500');
+      });
+
+      dropZone.addEventListener('dragleave', function (e) {
+        // Only reset when truly leaving the zone (not entering a child)
+        if (!dropZone.contains(e.relatedTarget)) {
+          dropZone.classList.remove('border-blue-400', 'bg-blue-50',
+                                    'dark:bg-blue-900/20', 'dark:border-blue-500');
+        }
+      });
+
+      dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('border-blue-400', 'bg-blue-50',
+                                  'dark:bg-blue-900/20', 'dark:border-blue-500');
+        var files = e.dataTransfer.files;
+        if (files && files[0]) {
+          // Inject file into the real input so the form submits it
+          var dt = new DataTransfer();
+          dt.items.add(files[0]);
+          fileInput.files = dt.files;
+          loadPreview(files[0]);
+        }
+      });
+    }
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  // window.load: fires after Tailwind CDN + fonts finish — layout fully settled
+  if (document.readyState === 'complete') {
+    initMap();
+  } else {
+    window.addEventListener('load', initMap);
+  }
+
+}());
+/* eslint-enable */
+/* jshint ignore:end */
+</script>
+{% endblock %}

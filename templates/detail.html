@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+
+{% block title %}{{ report.title }} — PIJAR{% endblock %}
+
+{% block head %}
+  <!-- Leaflet CSS — served locally, no CDN dependency -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}"/>
+{% endblock %}
+
+{% block content %}
+
+<!-- ================================================================
+     BREADCRUMB
+================================================================ -->
+<div class="mb-6">
+  <a href="{{ url_for('dashboard') }}"
+     class="inline-flex items-center gap-1.5 text-sm
+            text-slate-400 dark:text-slate-500
+            hover:text-blue-600 dark:hover:text-blue-400
+            transition-colors">
+    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+    Kembali ke Dashboard
+  </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- ============================================================
+       LEFT COLUMN: main content
+  ============================================================ -->
+  <div class="lg:col-span-2 space-y-5">
+
+    <!-- ── Title & badges ── -->
+    <div class="bg-white dark:bg-slate-800
+                border border-slate-200 dark:border-slate-700
+                rounded-md p-5 transition-colors
+                {% if report.is_overdue %}border-l-4 border-l-red-500
+                {% elif report.status == 'resolved' %}border-l-4 border-l-green-500
+                {% else %}border-l-4 border-l-blue-400{% endif %}">
+
+      <!-- Badges -->
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        {% if report.is_overdue %}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold
+                       bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400">
+            <i data-lucide="alert-triangle" class="w-3 h-3"></i> Lewat SLA
+          </span>
+        {% elif report.status == 'resolved' %}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold
+                       bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+            <i data-lucide="check-circle" class="w-3 h-3"></i> Selesai
+          </span>
+        {% else %}
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold
+                       bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400">
+            <i data-lucide="clock" class="w-3 h-3"></i> Menunggu
+          </span>
+        {% endif %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                     bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+          {{ report.category }}
+        </span>
+        <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">
+          {{ report.days_old }} hari lalu · Laporan #{{ report.id }}
+        </span>
+      </div>
+
+      <h1 class="text-lg font-bold text-slate-900 dark:text-white leading-snug mb-3">
+        {{ report.title }}
+      </h1>
+
+      {% if report.description %}
+        <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          {{ report.description }}
+        </p>
+      {% else %}
+        <p class="text-sm text-slate-400 dark:text-slate-500 italic">
+          Tidak ada deskripsi tambahan.
+        </p>
+      {% endif %}
+
+      <!-- Meta stats row -->
+      <div class="mt-4 flex flex-wrap items-center gap-4 text-xs
+                  text-slate-400 dark:text-slate-500
+                  border-t border-slate-100 dark:border-slate-700 pt-3">
+        <span class="flex items-center gap-1">
+          <i data-lucide="chevrons-up" class="w-3.5 h-3.5"></i>
+          {{ report.upvotes }} suara komunitas
+        </span>
+        <span class="flex items-center gap-1">
+          <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
+          Skor urgensi {{ report.urgency }}
+        </span>
+
+        <!-- Upvote action -->
+        <form action="{{ url_for('upvote', report_id=report.id) }}" method="POST" class="ml-auto">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          {% if report.id in upvoted_ids %}
+            <button type="submit" disabled
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                           text-slate-400 dark:text-slate-500
+                           bg-slate-50 dark:bg-slate-800
+                           border border-slate-200 dark:border-slate-700
+                           rounded opacity-60 cursor-not-allowed">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              Sudah Didukung
+            </button>
+          {% else %}
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                           text-slate-600 dark:text-slate-300
+                           bg-white dark:bg-slate-700
+                           border border-slate-200 dark:border-slate-600
+                           hover:bg-slate-50 dark:hover:bg-slate-600
+                           hover:border-slate-300 dark:hover:border-slate-500
+                           active:bg-slate-100 dark:active:bg-slate-500
+                           rounded transition-colors">
+              <i data-lucide="thumbs-up" class="w-3.5 h-3.5"></i>
+              Dukung Laporan
+            </button>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Before / After Photos ── -->
+    {% if report.issue_image or report.resolved_image %}
+      <div class="bg-white dark:bg-slate-800
+                  border border-slate-200 dark:border-slate-700
+                  rounded-md p-5 transition-colors">
+        <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
+          <i data-lucide="image" class="w-4 h-4 text-slate-400 dark:text-slate-500"></i>
+          Dokumentasi
+          <span class="ml-auto text-xs font-normal text-slate-400 dark:text-slate-500 flex items-center gap-1">
+            <i data-lucide="zoom-in" class="w-3 h-3"></i>
+            Klik foto untuk perbesar
+          </span>
+        </h2>
+        <div class="grid {% if report.issue_image and report.resolved_image %}grid-cols-1 sm:grid-cols-2{% else %}grid-cols-1{% endif %} gap-4">
+
+          {% if report.issue_image %}
+            {% set issue_url = url_for('static', filename='uploads/' + report.issue_image) %}
+            <figure>
+              <!--
+                object-contain: full image visible, no crop.
+                bg-slate-100 fills the letterbox area.
+                cursor-pointer + data-lightbox-src triggers the lightbox.
+              -->
+              <button type="button"
+                      data-lightbox-src="{{ issue_url }}"
+                      data-lightbox-caption="Kondisi Awal (Sebelum)"
+                      class="w-full aspect-video rounded-md overflow-hidden
+                             bg-slate-100 dark:bg-slate-700
+                             cursor-pointer group relative block
+                             focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <img src="{{ issue_url }}"
+                     alt="Foto kondisi awal: {{ report.title }}"
+                     class="w-full h-full object-contain transition-transform duration-200
+                            group-hover:scale-[1.02]"
+                     loading="lazy" />
+                <span class="absolute inset-0 flex items-center justify-center
+                             bg-black/0 group-hover:bg-black/20
+                             transition-colors duration-200">
+                  <i data-lucide="zoom-in"
+                     class="w-6 h-6 text-white opacity-0 group-hover:opacity-100
+                            drop-shadow transition-opacity duration-200"></i>
+                </span>
+              </button>
+              <figcaption class="mt-1.5 text-xs text-slate-400 dark:text-slate-500 text-center">
+                Kondisi Awal (Sebelum)
+              </figcaption>
+            </figure>
+          {% endif %}
+
+          {% if report.resolved_image %}
+            {% set resolved_url = url_for('static', filename='uploads/' + report.resolved_image) %}
+            <figure>
+              <button type="button"
+                      data-lightbox-src="{{ resolved_url }}"
+                      data-lightbox-caption="Setelah Perbaikan"
+                      class="w-full aspect-video rounded-md overflow-hidden
+                             bg-slate-100 dark:bg-slate-700
+                             cursor-pointer group relative block
+                             focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <img src="{{ resolved_url }}"
+                     alt="Foto setelah perbaikan: {{ report.title }}"
+                     class="w-full h-full object-contain transition-transform duration-200
+                            group-hover:scale-[1.02]"
+                     loading="lazy" />
+                <span class="absolute inset-0 flex items-center justify-center
+                             bg-black/0 group-hover:bg-black/20
+                             transition-colors duration-200">
+                  <i data-lucide="zoom-in"
+                     class="w-6 h-6 text-white opacity-0 group-hover:opacity-100
+                            drop-shadow transition-opacity duration-200"></i>
+                </span>
+              </button>
+              <figcaption class="mt-1.5 text-xs text-green-500 dark:text-green-400 text-center">
+                Setelah Perbaikan
+              </figcaption>
+            </figure>
+          {% endif %}
+
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- ================================================================
+         LIGHTBOX MODAL
+         Vanilla JS, zero dependencies. Opens on any [data-lightbox-src].
+         Keyboard: Escape closes. Click backdrop closes.
+         Pinch-zoom works natively on mobile (overflow:auto on inner wrapper).
+    ================================================================ -->
+    <div id="pijar-lightbox"
+         role="dialog"
+         aria-modal="true"
+         aria-label="Pratinjau foto penuh"
+         class="fixed inset-0 z-50 hidden
+                bg-black/90
+                flex items-center justify-center
+                p-4">
+
+      <!-- Close button -->
+      <button id="lb-close"
+              aria-label="Tutup pratinjau"
+              class="absolute top-4 right-4
+                     text-white/70 hover:text-white
+                     transition-colors z-10">
+        <i data-lucide="x" class="w-6 h-6 drop-shadow"></i>
+      </button>
+
+      <!-- Image wrapper — overflow:auto enables native pinch-zoom on mobile -->
+      <div class="relative max-w-full max-h-full flex flex-col items-center gap-3">
+        <img id="lb-img"
+             src=""
+             alt=""
+             class="max-w-[90vw] max-h-[80vh] rounded object-contain drop-shadow-2xl
+                    select-none" />
+        <p id="lb-caption"
+           class="text-white/60 text-xs text-center"></p>
+      </div>
+
+    </div>
+
+    <!-- ── Leaflet Map Preview ── -->
+    {% if report.latitude and report.longitude %}
+      <div class="bg-white dark:bg-slate-800
+                  border border-slate-200 dark:border-slate-700
+                  rounded-md transition-colors">
+        <!-- Map card header -->
+        <div class="px-5 py-3 border-b border-slate-100 dark:border-slate-700
+                    flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <i data-lucide="map" class="w-4 h-4 text-slate-400 dark:text-slate-500"></i>
+            Lokasi Kerusakan
+          </h2>
+          <div class="flex items-center gap-3">
+            <!--
+              OSM deep-link format: #map=zoom/lat/lon
+              The ?mlat= format is the older permalink style; the hash fragment
+              is the current standard used by osm.org since ~2013.
+            -->
+            <a href="https://www.openstreetmap.org/#map=17/{{ report.latitude }}/{{ report.longitude }}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="inline-flex items-center gap-1 text-xs
+                      text-blue-600 dark:text-blue-400 hover:underline">
+              Buka di OSM
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+            <!--
+              Map Notes API: POST /api/0.6/notes (lat, lon, text)
+              Allows citizens to push damage reports as public OSM notes.
+              Opens a pre-filled OSM note creation form.
+            -->
+            <a href="https://www.openstreetmap.org/note/new#map=17/{{ report.latitude }}/{{ report.longitude }}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="inline-flex items-center gap-1 text-xs
+                      text-slate-400 dark:text-slate-500
+                      hover:text-slate-600 dark:hover:text-slate-300">
+              <i data-lucide="message-square-plus" class="w-3 h-3"></i>
+              Laporkan ke OSM
+            </a>
+          </div>
+        </div>
+
+        <!--
+          Map container rules (from OSM tile policy + Leaflet docs):
+          1. height MUST be set via inline style — Tailwind h-* alone is not
+             enough because Leaflet reads offsetHeight at init time before
+             Tailwind's stylesheet may have applied.
+          2. detectRetina: true — serves @2x tiles on HiDPI/Retina screens.
+          3. maxZoom: 19 — OSM standard tile layer hard cap.
+          4. scrollWheelZoom: false — prevents accidental scroll-hijack on
+             desktop, better UX per civic-app convention.
+          5. attribution is mandatory per OSM tile policy; must credit both
+             OpenStreetMap and its contributors.
+        -->
+        <div id="detail-map"
+             style="height:320px;"
+             class="w-full z-0"></div>
+
+        <!-- OSM attribution strip (policy compliance, visible below map) -->
+        <div class="px-4 py-2 border-t border-slate-100 dark:border-slate-700
+                    flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+          <i data-lucide="info" class="w-3 h-3 shrink-0"></i>
+          Data peta &copy;
+          <a href="https://www.openstreetmap.org/copyright"
+             target="_blank" rel="noopener noreferrer"
+             class="underline hover:text-slate-600 dark:hover:text-slate-300">
+            OpenStreetMap
+          </a>
+          dan kontributor, lisensi
+          <a href="https://opendatacommons.org/licenses/odbl/"
+             target="_blank" rel="noopener noreferrer"
+             class="underline hover:text-slate-600 dark:hover:text-slate-300">
+            ODbL
+          </a>.
+          Tile oleh
+          <a href="https://operations.osmfoundation.org/policies/tiles/"
+             target="_blank" rel="noopener noreferrer"
+             class="underline hover:text-slate-600 dark:hover:text-slate-300">
+            OSMF
+          </a>.
+        </div>
+
+      </div><!-- /map card -->
+    {% endif %}
+
+  </div><!-- /left column -->
+
+  <!-- ============================================================
+       RIGHT COLUMN: sidebar
+  ============================================================ -->
+  <aside class="space-y-4">
+
+    <!-- Budget transparency -->
+    {% if report.status == 'resolved' %}
+      <div class="bg-white dark:bg-slate-800
+                  border border-slate-200 dark:border-slate-700
+                  rounded-md p-5 transition-colors">
+        <h3 class="text-xs font-semibold uppercase tracking-widest
+                   text-slate-400 dark:text-slate-500 mb-3">
+          Transparansi Anggaran
+        </h3>
+        {% if report.budget_spent %}
+          <p class="text-2xl font-bold text-amber-700 dark:text-amber-400 mb-1">
+            Rp {{ "{:,.0f}".format(report.budget_spent).replace(',', '.') }}
+          </p>
+          {% if report.budget_source %}
+            <p class="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
+              <i data-lucide="landmark" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400 dark:text-slate-500"></i>
+              {{ report.budget_source }}
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="text-sm text-slate-400 dark:text-slate-500 italic">Data anggaran belum diisi.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <!-- Report info card -->
+    <div class="bg-white dark:bg-slate-800
+                border border-slate-200 dark:border-slate-700
+                rounded-md p-5 transition-colors">
+      <h3 class="text-xs font-semibold uppercase tracking-widest
+                 text-slate-400 dark:text-slate-500 mb-3">
+        Informasi Laporan
+      </h3>
+      <dl class="space-y-2 text-sm">
+        <div class="flex items-start gap-2">
+          <dt class="text-slate-400 dark:text-slate-500 w-20 shrink-0">Kategori</dt>
+          <dd class="font-medium text-slate-700 dark:text-slate-200">{{ report.category }}</dd>
+        </div>
+        <div class="flex items-start gap-2">
+          <dt class="text-slate-400 dark:text-slate-500 w-20 shrink-0">Status</dt>
+          <dd class="font-medium text-slate-700 dark:text-slate-200 capitalize">{{ report.status }}</dd>
+        </div>
+        <div class="flex items-start gap-2">
+          <dt class="text-slate-400 dark:text-slate-500 w-20 shrink-0">Dilaporkan</dt>
+          <dd class="font-medium text-slate-700 dark:text-slate-200">{{ report.days_old }} hari lalu</dd>
+        </div>
+        <div class="flex items-start gap-2">
+          <dt class="text-slate-400 dark:text-slate-500 w-20 shrink-0">Suara</dt>
+          <dd class="font-medium text-slate-700 dark:text-slate-200">{{ report.upvotes }}</dd>
+        </div>
+        {% if report.latitude and report.longitude %}
+          <div class="flex items-start gap-2">
+            <dt class="text-slate-400 dark:text-slate-500 w-20 shrink-0">Koordinat</dt>
+            <dd class="font-mono text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {{ "%.5f"|format(report.latitude) }},<br>{{ "%.5f"|format(report.longitude) }}
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Resolve shortcut — pending reports only -->
+    {% if report.status == 'pending' %}
+      <a href="{{ url_for('resolve', report_id=report.id) }}"
+         class="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-semibold
+                text-white bg-green-600 hover:bg-green-700 active:bg-green-800
+                rounded-md transition-colors">
+        <i data-lucide="check-square" class="w-4 h-4"></i>
+        Tindak Lanjuti Laporan
+      </a>
+    {% endif %}
+
+  </aside>
+
+</div>
+
+{% endblock %}
+
+<!-- ================================================================
+     SCRIPTS
+     Leaflet JS loaded here (end of body), AFTER the map container.
+     Wrapped in DOMContentLoaded for safe, race-condition-free execution.
+================================================================ -->
+{% block scripts %}
+<!-- Leaflet JS — served locally, no CDN dependency -->
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script>
+/* jshint ignore:start */
+/* eslint-disable */
+(function () {
+  'use strict';
+
+  {% if report.latitude and report.longitude %}
+
+  var LAT  = {{ report.latitude }};
+  var LON  = {{ report.longitude }};
+  var TITLE = {{ report.title    | tojson }};
+  var CAT   = {{ report.category | tojson }};
+
+  /*
+    Guard: if Leaflet failed to load from CDN (network block, slow CDN),
+    show a visible fallback instead of a silent blank box.
+  */
+  if (typeof L === 'undefined') {
+    var el = document.getElementById('detail-map');
+    if (el) {
+      el.style.display     = 'flex';
+      el.style.alignItems  = 'center';
+      el.style.justifyContent = 'center';
+      el.style.background  = '#f1f5f9';
+      el.style.color       = '#94a3b8';
+      el.style.fontSize    = '0.8rem';
+      el.textContent       = 'Peta tidak tersedia (Leaflet gagal dimuat).';
+    }
+    return;
+  }
+
+  function initMap() {
+    var container = document.getElementById('detail-map');
+    if (!container) return;
+
+    var map = L.map(container, {
+      zoomControl:        true,
+      scrollWheelZoom:    false,
+      attributionControl: true
+    }).setView([LAT, LON], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution : '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+      maxZoom     : 19,
+      detectRetina: true
+    }).addTo(map);
+
+    /*
+      invalidateSize() forces Leaflet to re-measure the container after
+      layout is fully settled. Needed because Tailwind CDN applies classes
+      async — the container offsetHeight may change after DOMContentLoaded.
+    */
+    setTimeout(function () { map.invalidateSize(); }, 200);
+
+    /* DOM-based popup — immune to apostrophes and XSS */
+    var popupEl = document.createElement('div');
+    var titleEl = document.createElement('strong');
+    titleEl.textContent = TITLE;
+    var catEl = document.createElement('div');
+    catEl.style.cssText = 'font-size:0.75rem;color:#64748b;margin-top:2px;';
+    catEl.textContent = CAT;
+    popupEl.appendChild(titleEl);
+    popupEl.appendChild(catEl);
+
+    L.marker([LAT, LON]).addTo(map).bindPopup(popupEl).openPopup();
+  }
+
+  /*
+    Use 'load' instead of 'DOMContentLoaded' as the trigger.
+    'load' fires after ALL resources (including Tailwind CDN script +
+    font) have finished — guaranteeing layout is fully settled and
+    offsetHeight is accurate when Leaflet first measures the container.
+  */
+  if (document.readyState === 'complete') {
+    initMap();
+  } else {
+    window.addEventListener('load', initMap);
+  }
+
+  {% endif %}
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // ── Lightbox ─────────────────────────────────────────────────────────
+  var lb       = document.getElementById('pijar-lightbox');
+  var lbImg    = document.getElementById('lb-img');
+  var lbCap    = document.getElementById('lb-caption');
+  var lbClose  = document.getElementById('lb-close');
+
+  function openLightbox(src, caption) {
+    lbImg.src        = src;
+    lbImg.alt        = caption || '';
+    lbCap.textContent = caption || '';
+    lb.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    lbClose.focus();
+  }
+
+  function closeLightbox() {
+    lb.classList.add('hidden');
+    lbImg.src = '';
+    document.body.style.overflow = '';
+  }
+
+  // Wire up every trigger button
+  document.querySelectorAll('[data-lightbox-src]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      openLightbox(btn.dataset.lightboxSrc, btn.dataset.lightboxCaption);
+    });
+  });
+
+  // Close on backdrop click (not on the image itself)
+  lb.addEventListener('click', function (e) {
+    if (e.target === lb) closeLightbox();
+  });
+
+  // Close button
+  if (lbClose) lbClose.addEventListener('click', closeLightbox);
+
+  // Close on Escape
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !lb.classList.contains('hidden')) closeLightbox();
+  });
+
+}());
+/* eslint-enable */
+/* jshint ignore:end */
+</script>
+{% endblock %}

@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}Selesaikan Laporan #{{ report.id }} — PIJAR{% endblock %}
+
+{% block content %}
+
+<!-- ===================================================================
+     PAGE HEADER
+=================================================================== -->
+<div class="mb-8">
+  <a href="{{ url_for('dashboard') }}"
+     class="inline-flex items-center gap-1.5 text-sm
+            text-slate-400 dark:text-slate-500
+            hover:text-blue-600 dark:hover:text-blue-400
+            transition-colors mb-3">
+    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+    Kembali ke Dashboard
+  </a>
+  <div class="flex flex-wrap items-start gap-3">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+        Selesaikan Laporan
+      </h1>
+      <p class="mt-1 text-slate-500 dark:text-slate-400 text-sm sm:text-base">
+        Formulir ini hanya untuk operator pemerintah. Diperlukan PIN untuk mengisi data penyelesaian.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================================
+     REPORT CONTEXT CARD (read-only)
+=================================================================== -->
+<div class="max-w-2xl mb-6">
+  <div class="bg-slate-50 dark:bg-slate-800/60
+              border border-slate-200 dark:border-slate-700
+              rounded-md px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+    <div class="flex-1 min-w-0">
+      <p class="text-xs font-semibold uppercase tracking-widest
+                text-slate-400 dark:text-slate-500 mb-1">Laporan yang akan diselesaikan</p>
+      <p class="text-sm font-bold text-slate-800 dark:text-slate-100 leading-snug truncate">
+        #{{ report.id }} — {{ report.title }}
+      </p>
+      <div class="mt-1 flex flex-wrap gap-2">
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                     bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+          {{ report.category }}
+        </span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                     bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400">
+          {{ report.status }}
+        </span>
+      </div>
+    </div>
+    {% if report.issue_image %}
+      <img src="{{ url_for('static', filename='uploads/' + report.issue_image) }}"
+           alt="Foto laporan #{{ report.id }}"
+           class="w-24 h-16 object-contain rounded-md
+                  border border-slate-200 dark:border-slate-700
+                  bg-white dark:bg-slate-800 shrink-0"
+           loading="lazy" />
+    {% endif %}
+  </div>
+</div>
+
+<!-- ===================================================================
+     RESOLUTION FORM
+=================================================================== -->
+<div class="max-w-2xl">
+  <form action="{{ url_for('resolve', report_id=report.id) }}"
+        method="POST"
+        enctype="multipart/form-data"
+        novalidate
+        class="bg-white dark:bg-slate-800
+               rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
+
+    <!-- CSRF token — required by Flask-WTF on every POST form -->
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+    <!-- Form body -->
+    <div class="px-6 py-6 space-y-6">
+
+      <!-- ── Security notice ── -->
+      <div class="flex items-start gap-3 px-4 py-3
+                  bg-amber-50 dark:bg-amber-900/20
+                  border border-amber-200 dark:border-amber-800 rounded-md">
+        <i data-lucide="lock" class="w-4 h-4 shrink-0 mt-0.5 text-amber-500 dark:text-amber-400"></i>
+        <p class="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+          Halaman ini dilindungi PIN operator. Masukkan PIN yang benar untuk melanjutkan.
+          Seluruh tindakan dicatat untuk keperluan transparansi publik.
+        </p>
+      </div>
+
+      <!-- ── Field: PIN Operator ── -->
+      <div>
+        <label for="pin" class="block text-sm font-semibold
+                                text-slate-700 dark:text-slate-200 mb-1.5">
+          PIN Operator <span class="text-red-500" aria-hidden="true">*</span>
+        </label>
+        <input type="password"
+               id="pin"
+               name="pin"
+               required
+               maxlength="20"
+               autocomplete="current-password"
+               placeholder="Masukkan PIN"
+               class="w-full sm:w-48 px-4 py-2.5 rounded-md
+                      border border-slate-300 dark:border-slate-600
+                      bg-white dark:bg-slate-700
+                      text-slate-800 dark:text-slate-100
+                      placeholder-slate-400 dark:placeholder-slate-500
+                      text-sm tracking-widest
+                      focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent
+                      transition" />
+        <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">PIN diberikan oleh administrator sistem.</p>
+      </div>
+
+      <!-- ── Field: Foto Penyelesaian ── -->
+      <div>
+        <label for="resolved_image" class="block text-sm font-semibold
+                                           text-slate-700 dark:text-slate-200 mb-1.5">
+          Foto Sesudah Perbaikan
+          <span class="font-normal text-slate-400 dark:text-slate-500">(opsional, maks. 8 MB)</span>
+        </label>
+
+        <!-- Drop zone — same pattern as report.html -->
+        <div id="resolve-drop-zone"
+             class="relative w-full border-2 border-dashed rounded-md
+                    border-slate-300 dark:border-slate-600
+                    bg-slate-50 dark:bg-slate-700/50
+                    transition-colors duration-150 cursor-pointer">
+
+          <!-- Idle state -->
+          <label for="resolved_image"
+                 id="resolve-drop-idle"
+                 class="flex flex-col items-center justify-center py-8 gap-2 cursor-pointer">
+            <i data-lucide="upload-cloud"
+               class="w-8 h-8 text-slate-300 dark:text-slate-500"></i>
+            <p class="text-sm text-slate-400 dark:text-slate-400">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Klik untuk unggah</span>
+              atau seret foto sesudah perbaikan
+            </p>
+            <p class="text-xs text-slate-300 dark:text-slate-600">PNG, JPG, JPEG, GIF — maks. 8 MB</p>
+          </label>
+
+          <!-- Preview state -->
+          <div id="resolve-drop-preview" class="hidden p-4 flex items-start gap-4">
+            <img id="resolve-preview-thumb"
+                 src="" alt="Pratinjau foto sesudah perbaikan"
+                 class="w-24 h-24 object-contain rounded border border-slate-200
+                        dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+            <div class="flex-1 min-w-0 space-y-1">
+              <p id="resolve-preview-name"
+                 class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate"></p>
+              <p id="resolve-preview-size"
+                 class="text-xs text-slate-400 dark:text-slate-500"></p>
+              <div class="w-full bg-slate-200 dark:bg-slate-600 rounded-full h-1.5 overflow-hidden">
+                <div id="resolve-preview-bar"
+                     class="h-1.5 bg-green-500 rounded-full transition-all duration-300"
+                     style="width:0%"></div>
+              </div>
+              <p id="resolve-preview-status"
+                 class="text-xs text-slate-400 dark:text-slate-500"></p>
+            </div>
+            <button type="button" id="resolve-drop-remove"
+                    aria-label="Hapus foto"
+                    class="shrink-0 text-slate-400 hover:text-red-500 dark:hover:text-red-400
+                           transition-colors">
+              <i data-lucide="x-circle" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <!-- Full-area invisible file input -->
+          <input id="resolved_image"
+                 name="resolved_image"
+                 type="file"
+                 accept=".png,.jpg,.jpeg,.gif"
+                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                 aria-label="Unggah foto sesudah perbaikan" />
+        </div>
+
+        <p id="resolve-file-error"
+           class="mt-1.5 text-xs text-red-500 hidden"></p>
+      </div>
+
+      <!-- ── Field: Anggaran yang Digunakan ── -->
+      <div>
+        <label for="budget_spent" class="block text-sm font-semibold
+                                         text-slate-700 dark:text-slate-200 mb-1.5">
+          Anggaran yang Digunakan (Rp)
+          <span class="font-normal text-slate-400 dark:text-slate-500">(opsional)</span>
+        </label>
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 flex items-center pl-3
+                       text-slate-400 dark:text-slate-500 text-sm pointer-events-none select-none">
+            Rp
+          </span>
+          <input type="number"
+                 id="budget_spent"
+                 name="budget_spent"
+                 min="0"
+                 step="1000"
+                 placeholder="0"
+                 class="w-full pl-10 pr-4 py-2.5 rounded-md
+                        border border-slate-300 dark:border-slate-600
+                        bg-white dark:bg-slate-700
+                        text-slate-800 dark:text-slate-100
+                        placeholder-slate-400 dark:placeholder-slate-500
+                        text-sm
+                        focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent
+                        transition" />
+        </div>
+      </div>
+
+      <!-- ── Field: Sumber Anggaran ── -->
+      <div>
+        <label for="budget_source" class="block text-sm font-semibold
+                                          text-slate-700 dark:text-slate-200 mb-1.5">
+          Sumber Anggaran
+          <span class="font-normal text-slate-400 dark:text-slate-500">(opsional)</span>
+        </label>
+        <input type="text"
+               id="budget_source"
+               name="budget_source"
+               maxlength="200"
+               placeholder="Contoh: APBD Kota Surabaya 2024"
+               class="w-full px-4 py-2.5 rounded-md
+                      border border-slate-300 dark:border-slate-600
+                      bg-white dark:bg-slate-700
+                      text-slate-800 dark:text-slate-100
+                      placeholder-slate-400 dark:placeholder-slate-500
+                      text-sm
+                      focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent
+                      transition" />
+      </div>
+
+    </div><!-- /form body -->
+
+    <!-- Form footer -->
+    <div class="px-6 py-4
+                bg-slate-50 dark:bg-slate-700/50
+                border-t border-slate-200 dark:border-slate-700
+                flex flex-col sm:flex-row items-center justify-between gap-3">
+      <a href="{{ url_for('dashboard') }}"
+         class="w-full sm:w-auto inline-flex items-center justify-center gap-1
+                px-4 py-2.5 text-sm font-semibold
+                text-slate-600 dark:text-slate-300
+                bg-white dark:bg-slate-700
+                hover:bg-slate-100 dark:hover:bg-slate-600
+                active:bg-slate-200 dark:active:bg-slate-500
+                border border-slate-300 dark:border-slate-600
+                rounded-md transition-colors order-2 sm:order-1">
+        Batal
+      </a>
+      <button type="submit"
+              class="w-full sm:w-auto inline-flex items-center justify-center gap-2
+                     px-6 py-2.5 text-sm font-bold text-white
+                     bg-green-600 hover:bg-green-700 active:bg-green-800
+                     rounded-md transition-colors order-1 sm:order-2">
+        <i data-lucide="check-circle" class="w-4 h-4"></i>
+        Tandai Selesai &amp; Simpan
+      </button>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* jshint ignore:start */
+/* eslint-disable */
+(function () {
+  'use strict';
+
+  var dropZone   = document.getElementById('resolve-drop-zone');
+  var fileInput  = document.getElementById('resolved_image');
+  var dropIdle   = document.getElementById('resolve-drop-idle');
+  var dropPrev   = document.getElementById('resolve-drop-preview');
+  var prevThumb  = document.getElementById('resolve-preview-thumb');
+  var prevName   = document.getElementById('resolve-preview-name');
+  var prevSize   = document.getElementById('resolve-preview-size');
+  var prevBar    = document.getElementById('resolve-preview-bar');
+  var prevStatus = document.getElementById('resolve-preview-status');
+  var dropRemove = document.getElementById('resolve-drop-remove');
+  var fileError  = document.getElementById('resolve-file-error');
+
+  var MAX_BYTES  = 8 * 1024 * 1024;
+  var ALLOWED    = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+  function fmtBytes(b) {
+    return b >= 1048576
+      ? (b / 1048576).toFixed(1) + ' MB'
+      : (b / 1024).toFixed(0)   + ' KB';
+  }
+
+  function showError(msg) {
+    fileError.textContent = msg;
+    fileError.classList.remove('hidden');
+  }
+
+  function clearError() {
+    fileError.classList.add('hidden');
+    fileError.textContent = '';
+  }
+
+  function resetZone() {
+    dropIdle.classList.remove('hidden');
+    dropPrev.classList.add('hidden');
+    prevThumb.src = '';
+    prevBar.style.width = '0%';
+    prevStatus.textContent = '';
+    clearError();
+  }
+
+  function loadPreview(file) {
+    clearError();
+
+    if (ALLOWED.indexOf(file.type) === -1) {
+      showError('Format tidak didukung. Gunakan PNG, JPG, JPEG, atau GIF.');
+      resetZone();
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      showError('Ukuran file terlalu besar. Maksimal 8 MB.');
+      resetZone();
+      return;
+    }
+
+    dropIdle.classList.add('hidden');
+    dropPrev.classList.remove('hidden');
+    prevName.textContent   = file.name;
+    prevSize.textContent   = fmtBytes(file.size);
+    prevStatus.textContent = 'Membaca file...';
+    prevBar.style.width    = '0%';
+
+    var reader = new FileReader();
+    reader.onprogress = function (e) {
+      if (e.lengthComputable) {
+        prevBar.style.width = Math.round((e.loaded / e.total) * 80) + '%';
+      }
+    };
+    reader.onload = function (e) {
+      prevBar.style.width    = '100%';
+      prevStatus.textContent = 'Siap diunggah';
+      prevThumb.src          = e.target.result;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    };
+    reader.onerror = function () {
+      prevStatus.textContent = 'Gagal membaca file.';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', function () {
+      if (this.files && this.files[0]) loadPreview(this.files[0]);
+    });
+  }
+
+  if (dropRemove) {
+    dropRemove.addEventListener('click', function (e) {
+      e.stopPropagation();
+      fileInput.value = '';
+      resetZone();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+  }
+
+  if (dropZone) {
+    dropZone.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      dropZone.classList.add('border-green-400', 'bg-green-50',
+                             'dark:bg-green-900/20', 'dark:border-green-600');
+    });
+    dropZone.addEventListener('dragleave', function (e) {
+      if (!dropZone.contains(e.relatedTarget)) {
+        dropZone.classList.remove('border-green-400', 'bg-green-50',
+                                  'dark:bg-green-900/20', 'dark:border-green-600');
+      }
+    });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.classList.remove('border-green-400', 'bg-green-50',
+                                'dark:bg-green-900/20', 'dark:border-green-600');
+      var files = e.dataTransfer.files;
+      if (files && files[0]) {
+        var dt = new DataTransfer();
+        dt.items.add(files[0]);
+        fileInput.files = dt.files;
+        loadPreview(files[0]);
+      }
+    });
+  }
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}());
+/* eslint-enable */
+/* jshint ignore:end */
+</script>
+{% endblock %}
